@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Prompt 提示詞資料庫</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Fraunces (display serif), Inter (body) & JetBrains Mono (code) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Tailwind Custom Design Tokens: "Advisory" palette — ink / paper / brass -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['Fraunces', 'serif'],
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            ink: {
+              DEFAULT: '#1b1f27',
+              2: '#242833',
+              3: '#2f3543',
+            },
+            paper: {
+              DEFAULT: '#f8f6f1',
+              2: '#efebe1',
+            },
+            brass: {
+              50: '#f8f3e6',
+              100: '#efe1c2',
+              200: '#e0c98e',
+              300: '#cdac66',
+              400: '#b6924b',
+              500: '#9c7a3c',
+              600: '#7c5f2c',
+              700: '#5f4820',
+            },
+            line: {
+              DEFAULT: '#e2dccb',
+              dark: '#383e4c',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cdac66;
+      border-radius: 9999px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+      background: #5f4820;
+    }
+    .glass-effect {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .line-clamp-3 {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .line-clamp-6 {
+      display: -webkit-box;
+      -webkit-line-clamp: 6;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .eyebrow {
+      letter-spacing: 0.22em;
+    }
+  </style>
+</head>
+<body class="bg-paper dark:bg-ink text-ink dark:text-paper-2 min-h-full flex flex-col font-sans transition-colors duration-200">
+
+  <!-- Top Navigation Header / Masthead -->
+  <header class="sticky top-0 z-30 bg-paper/90 dark:bg-ink/90 border-b border-line dark:border-line-dark glass-effect">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+      <!-- Logo & Title -->
+      <div class="flex items-center space-x-4">
+        <div class="w-11 h-11 border border-brass-400 dark:border-brass-300 flex items-center justify-center text-brass-500 dark:text-brass-200">
+          <span class="font-serif text-lg">議</span>
+        </div>
+        <div>
+          <p class="eyebrow text-[10px] uppercase text-brass-600 dark:text-brass-300 font-semibold mb-1">Prompt Advisory Index</p>
+          <h1 class="font-serif text-xl font-semibold text-ink dark:text-paper tracking-tight leading-none">
+            AI Prompt 提示詞資料庫
+          </h1>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1.5">
+            <span id="syncStatusBadge" class="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse"></span>
+              Google Sheet 即時連線
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Header Right Action Tools -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Manual Refresh Button -->
+        <button id="refreshBtn" onclick="loadSheetData(true)" class="p-2 rounded-md text-slate-500 hover:text-ink dark:text-slate-400 dark:hover:text-paper hover:bg-paper-2 dark:hover:bg-ink-2 transition-all text-sm flex items-center gap-1.5" title="重新同步資料">
+          <i id="refreshIcon" class="fa-solid fa-arrows-rotate"></i>
+          <span class="hidden sm:inline text-xs font-medium">同步 Sheet</span>
+        </button>
+
+        <!-- View Mode Switch -->
+        <div class="bg-paper-2 dark:bg-ink-2 p-1 rounded-md flex items-center border border-line dark:border-line-dark">
+          <button id="viewGridBtn" onclick="setViewMode('grid')" class="p-1.5 rounded text-ink dark:text-paper bg-white dark:bg-ink-3 shadow-sm transition-all text-xs" title="網格視圖">
+            <i class="fa-solid fa-border-all"></i>
+          </button>
+          <button id="viewListBtn" onclick="setViewMode('list')" class="p-1.5 rounded text-slate-400 dark:text-slate-500 hover:text-ink dark:hover:text-paper transition-all text-xs" title="列表視圖">
+            <i class="fa-solid fa-list-ul"></i>
+          </button>
+        </div>
+
+        <!-- Dark/Light Mode Toggle -->
+        <button id="themeToggleBtn" onclick="toggleDarkMode()" class="p-2 rounded-md text-slate-500 hover:text-ink dark:text-slate-400 dark:hover:text-paper hover:bg-paper-2 dark:hover:bg-ink-2 transition-all">
+          <i class="fa-solid fa-moon dark:hidden"></i>
+          <i class="fa-solid fa-sun hidden dark:block text-brass-300"></i>
+        </button>
+
+        <!-- External Link -->
+        <a href="https://docs.google.com/spreadsheets/d/1oKvF9Hb0OQ9uCMI-BiWwfi6VG4ZftFkLY8-RVa9_9fM/edit?gid=1480282197#gid=1480282197" target="_blank" rel="noopener noreferrer" class="hidden md:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md border border-line dark:border-line-dark text-ink dark:text-paper hover:border-brass-400 dark:hover:border-brass-400 hover:text-brass-600 dark:hover:text-brass-300 text-xs font-medium transition-all">
+          <i class="fa-solid fa-table"></i>
+          <span>開啟試算表</span>
+          <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Body Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col gap-6">
+
+    <!-- Search & Quick Stats Banner -->
+    <div class="bg-white dark:bg-ink-2 rounded-xl p-5 border border-line dark:border-line-dark shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+
+      <!-- Search Input Box -->
+      <div class="relative w-full md:w-96">
+        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </div>
+        <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋標題、類別或提示詞內文..." class="w-full pl-10 pr-10 py-2.5 bg-paper dark:bg-ink border border-line dark:border-line-dark rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brass-400 focus:bg-white dark:focus:bg-ink-3 transition-all">
+        <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Quick Metrics/Stats Display -->
+      <div class="flex items-center space-x-6 text-xs text-slate-500 dark:text-slate-400 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-line dark:border-line-dark pt-3 md:pt-0">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-md border border-line dark:border-line-dark text-brass-600 dark:text-brass-300 flex items-center justify-center">
+            <i class="fa-solid fa-layer-group"></i>
+          </div>
+          <div>
+            <div class="text-slate-400 text-[10px] eyebrow uppercase">提示詞總計</div>
+            <div id="statTotal" class="font-serif font-semibold text-ink dark:text-paper text-sm">--</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-md border border-line dark:border-line-dark text-brass-600 dark:text-brass-300 flex items-center justify-center">
+            <i class="fa-solid fa-shapes"></i>
+          </div>
+          <div>
+            <div class="text-slate-400 text-[10px] eyebrow uppercase">類型分類</div>
+            <div id="statTypes" class="font-serif font-semibold text-ink dark:text-paper text-sm">--</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-md border border-line dark:border-line-dark text-brass-600 dark:text-brass-300 flex items-center justify-center">
+            <i class="fa-solid fa-tags"></i>
+          </div>
+          <div>
+            <div class="text-slate-400 text-[10px] eyebrow uppercase">應用類別</div>
+            <div id="statCategories" class="font-serif font-semibold text-ink dark:text-paper text-sm">--</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Type Filter Tabs (AI 協思 / AI 協做 / AI 助理) -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 max-w-full" id="typeTabs">
+          <!-- Dynamic Type Tabs Inject Here -->
+        </div>
+      </div>
+
+      <!-- Sub-category Filter Pills (內容創作 / 程式應用 / 簡報表達 ...) -->
+      <div class="flex items-center gap-1.5 flex-wrap text-xs" id="categoryPills">
+        <!-- Dynamic Category Pills Inject Here -->
+      </div>
+    </div>
+
+    <!-- Prompt Content Container (Grid / List) -->
+    <div id="cardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 transition-all">
+      <!-- Loading Skeleton Placeholder -->
+      <div class="col-span-full py-16 flex flex-col items-center justify-center text-slate-400 space-y-3">
+        <i class="fa-solid fa-spinner fa-spin text-3xl text-brass-500"></i>
+        <p class="text-sm font-medium">正在載入 Google Sheet Prompt 資料...</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Prompt Detail Modal -->
+  <div id="promptModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm transition-opacity">
+    <div class="bg-white dark:bg-ink-2 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-line dark:border-line-dark overflow-hidden transform transition-all scale-95 opacity-0" id="modalCard">
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-line dark:border-line-dark flex items-start justify-between gap-4 bg-paper/60 dark:bg-ink/40">
+        <div>
+          <div class="flex items-center gap-2 mb-2" id="modalBadges">
+            <!-- Badges -->
+          </div>
+          <h2 class="font-serif text-xl font-semibold text-ink dark:text-white flex items-center gap-2" id="modalTitle">
+            Prompt 標題
+          </h2>
+        </div>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-paper-2 dark:bg-ink-3 text-slate-400 hover:text-ink dark:hover:text-paper flex items-center justify-center transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto flex-1 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 dark:text-slate-400 eyebrow uppercase mb-2">
+            提示詞完整內容 (Prompt Template)
+          </label>
+          <div class="relative group">
+            <textarea id="modalTextarea" rows="10" readonly class="w-full p-4 rounded-lg bg-ink text-brass-200 font-mono text-sm leading-relaxed border border-ink-3 focus:outline-none focus:ring-2 focus:ring-brass-400 resize-none selection:bg-brass-500 selection:text-white"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-line dark:border-line-dark bg-paper/60 dark:bg-ink/40 flex items-center justify-between gap-3">
+        <span class="text-xs text-slate-400" id="modalCharCount">共 0 個字</span>
+        <div class="flex items-center gap-2">
+          <button onclick="closeModal()" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-paper-2 dark:hover:bg-ink-3 transition-all">
+            關閉
+          </button>
+          <button id="modalCopyBtn" onclick="copyModalPrompt()" class="px-5 py-2 rounded-lg text-xs font-semibold bg-ink hover:bg-brass-600 dark:bg-paper dark:text-ink dark:hover:bg-brass-300 text-paper shadow-sm transition-all flex items-center gap-2">
+            <i class="fa-regular fa-copy"></i>
+            <span>複製完整提示詞</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-ink text-paper dark:bg-paper dark:text-ink px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 border border-ink-3 dark:border-line text-sm font-medium">
+      <div class="w-6 h-6 rounded-full bg-brass-500 text-white flex items-center justify-center text-xs">
+        <i class="fa-solid fa-check"></i>
+      </div>
+      <span id="toastMsg">提示詞已成功複製到剪貼簿！</span>
+    </div>
+  </div>
+
+  <script>
+    // Google Sheet CSV URL
+    const SHEET_ID = '1oKvF9Hb0OQ9uCMI-BiWwfi6VG4ZftFkLY8-RVa9_9fM';
+    const GID = '1480282197';
+    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`;
+
+    // Fallback Initial Dataset matching the sheet (Guarantees display even if direct fetch has network restriction)
+    const FALLBACK_DATA = [
+      {
+        type: 'AI 協思',
+        category: '內容創作',
+        title: '影片清理',
+        step: '3.0',
+        content: `3.0  你的角色是一位「內容結構化融合員」，不是編輯、不是評論者。\n我會提供多篇已整理好的文章（每篇約 2000 字，皆遵循「情境／衝擊／課題／對策」架構）。\n\n任務：\n1️⃣ 將這些文章融合成一篇文章，依然使用「情境／衝擊／課題／對策」架構。\n2️⃣ 完全保留原作者語意與立場，不得新增觀點、不得推論。\n3️⃣ 對於重複內容，僅進行語意等價的刪減，保留核心訊息。\n4️⃣ 若某段內容無法合理歸類，請「保留但註記無法歸類」，不得硬塞。\n\n輸出要求：\n\n1️⃣總字數約 融合後所需字數（可指定，例如 2000~2500 字）\n2️⃣嚴格依照架構排序\n3️⃣僅輸出整理後內容，不需說明過程\n\n請在最後標註【產出字數】`
+      },
+      {
+        type: 'AI 協思',
+        category: '程式應用',
+        title: '除錯梳理',
+        step: '1.0',
+        content: `請先不要撰寫任何程式碼。\n針對目前出現的錯誤，進行系統性的分析與拆解，並依序說明：\n1-錯誤的具體現象與發生條件\n2-可能的成因（包含假設與不確定點）\n3-每一項成因對應的影響範圍\n4-可行的對策方向與取捨說明\n\n在錯誤結構、成因與對策都討論清楚之前，請暫停任何實作或程式碼層級的回應。\n待分析完成後，再依討論結果決定是否進入撰寫程式階段。`
+      },
+      {
+        type: 'AI 協思',
+        category: '程式應用',
+        title: '除錯梳理',
+        step: '2.0',
+        content: `請先不要急著修改程式。\n根據你的分析，將每一個驗證與檢查的過程，逐一寫入除錯流程中，並清楚標示：\n1-每一個被驗證的資訊點是什麼\n2-使用了哪些依據或假設進行確認\n3-驗證結果是否成立（通過 / 不通過 / 尚未確認）\n在所有關鍵資訊點都完成確認、且有足夠資訊之前，請暫停任何程式碼修改行為。\n待驗證流程完整後，再依據確認結果，提出具體且必要的程式修改建議。`
+      },
+      {
+        type: 'AI 協思',
+        category: '簡報表達',
+        title: '簡報結構',
+        step: '1.0',
+        content: `針對簡報的結構美，給我相關的建議\n定義：強調簡報內容的條理與邏輯性。\n目標：要讓聽眾能輕鬆理解整體脈絡。`
+      },
+      {
+        type: 'AI 協做',
+        category: '程式生成',
+        title: '表單生成',
+        step: '1.0',
+        content: `依據附件，為我設計一份「課前需求調查問卷」，題目約10~12題，並直接提供可執行的 Google Apps Script (GAS) 程式碼，運用程式生成的方式是Google表單，目的是調查大家使用 AI 的狀況，以利課程案例調整之用，最後一題，為簡答題，題目為"AI對我而是什麼？"，此題設定為必填，表單程式之後，並引導我如何使用Google Script來完成。完成時，務必檢查，避免空白產生`
+      },
+      {
+        type: 'AI 助理',
+        category: '文本優化',
+        title: '課程推廣',
+        step: '',
+        content: `# 你是一名社群小編，擅長撰寫課程推廣文案，將我提供給資訊變成PO文，將將PO到 FB/IG 等社群平台：\n - 課程名稱：[〇]\n - 關鍵字：[〇]\n - 課程介紹：[課程介紹文字] (字數約 250 字)\n - PO文語氣：活潑、熱情、專業\n - 插入適當的表情號（emoji），但避免過多，以提升文章吸引力與易讀性\n - 文章結尾加上 Hashtag，至少三個，最多五個，要包含課程關鍵字\n - 課程網址：`
+      }
+    ];
+
+    // App State Variables
+    let rawPrompts = [];
+    let activeType = 'ALL';
+    let activeCategory = 'ALL';
+    let searchQuery = '';
+    let currentViewMode = 'grid'; // 'grid' or 'list'
+    let selectedPromptForModal = null;
+
+    function parseCSV(text) {
+      const lines = [];
+      let row = [];
+      let inQuotes = false;
+      let currentVal = '';
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            currentVal += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          row.push(currentVal.trim());
+          currentVal = '';
+        } else if ((char === '\r' || char === '\n') && !inQuotes) {
+          if (char === '\r' && nextChar === '\n') i++;
+          row.push(currentVal.trim());
+          if (row.some(f => f !== '')) lines.push(row);
+          row = [];
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      if (currentVal || row.length > 0) {
+        row.push(currentVal.trim());
+        lines.push(row);
+      }
+      return lines;
+    }
+
+    async function loadSheetData(isManual = false) {
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+      try {
+        const res = await fetch(CSV_URL + '&t=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        const parsed = parseCSV(text);
+
+        // Header row index usually 0
+        const rows = parsed.slice(1);
+        const sheetData = rows.map((cols, idx) => ({
+          id: idx,
+          type: cols[0] || '一般',
+          category: cols[1] || '其他',
+          title: cols[2] || '無標題',
+          step: cols[3] && cols[3] !== 'NaN' ? cols[3] : '',
+          content: cols[4] || ''
+        })).filter(item => item.content.trim() !== '');
+
+        if (sheetData.length > 0) {
+          rawPrompts = sheetData;
+        } else {
+          rawPrompts = FALLBACK_DATA;
+        }
+
+        document.getElementById('syncStatusBadge').innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse"></span>
+          Google Sheet 連線成功 (${rawPrompts.length} 筆)
+        `;
+        if (isManual) showToast('已最新同步 Google Sheet 資料');
+
+      } catch (err) {
+        console.warn('Google Sheet fetch fallback used:', err);
+        rawPrompts = FALLBACK_DATA.map((item, idx) => ({ ...item, id: idx }));
+        document.getElementById('syncStatusBadge').innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-brass-500"></span>
+          預設資料集備份 (共 ${rawPrompts.length} 筆)
+        `;
+      } finally {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        updateStats();
+        renderFilters();
+        renderPrompts();
+      }
+    }
+
+    function updateStats() {
+      const total = rawPrompts.length;
+      const types = new Set(rawPrompts.map(p => p.type)).size;
+      const categories = new Set(rawPrompts.map(p => p.category)).size;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statTypes').textContent = types;
+      document.getElementById('statCategories').textContent = categories;
+    }
+
+    function renderFilters() {
+      // 1. Types Tabs
+      const typeList = ['ALL', ...new Set(rawPrompts.map(p => p.type))];
+      const typeTabsEl = document.getElementById('typeTabs');
+
+      typeTabsEl.innerHTML = typeList.map(t => {
+        const count = t === 'ALL' ? rawPrompts.length : rawPrompts.filter(p => p.type === t).length;
+        const isActive = activeType === t;
+        const activeClasses = isActive
+          ? 'bg-ink text-paper dark:bg-paper dark:text-ink shadow-sm'
+          : 'bg-white dark:bg-ink-2 text-slate-600 dark:text-slate-300 hover:bg-paper-2 dark:hover:bg-ink-3 border border-line dark:border-line-dark';
+
+        const label = t === 'ALL' ? '全部類型' : t;
+        return `
+          <button onclick="selectType('${t}')" class="px-3.5 py-1.5 rounded-lg font-medium text-xs whitespace-nowrap transition-all flex items-center gap-1.5 ${activeClasses}">
+            <span>${label}</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[10px] ${isActive ? 'bg-brass-400/30 text-paper dark:text-ink' : 'bg-paper-2 dark:bg-ink-3 text-slate-500 dark:text-slate-400'}">${count}</span>
+          </button>
+        `;
+      }).join('');
+
+      // 2. Category Pills
+      const availableCategories = activeType === 'ALL'
+        ? [...new Set(rawPrompts.map(p => p.category))]
+        : [...new Set(rawPrompts.filter(p => p.type === activeType).map(p => p.category))];
+
+      const categoryPillsEl = document.getElementById('categoryPills');
+      const catList = ['ALL', ...availableCategories];
+
+      categoryPillsEl.innerHTML = catList.map(c => {
+        const isActive = activeCategory === c;
+        const activeClasses = isActive
+          ? 'bg-brass-100 dark:bg-brass-700/30 text-brass-700 dark:text-brass-200 font-semibold border-brass-300 dark:border-brass-500'
+          : 'bg-paper-2 dark:bg-ink-2 text-slate-500 dark:text-slate-400 border-transparent hover:bg-paper dark:hover:bg-ink-3';
+
+        const label = c === 'ALL' ? '全部分類' : c;
+        return `
+          <button onclick="selectCategory('${c}')" class="px-3 py-1 rounded-md border text-xs transition-all ${activeClasses}">
+            # ${label}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectType(type) {
+      activeType = type;
+      activeCategory = 'ALL'; // Reset sub-category on main type switch
+      renderFilters();
+      renderPrompts();
+    }
+
+    function selectCategory(cat) {
+      activeCategory = cat;
+      renderFilters();
+      renderPrompts();
+    }
+
+    function handleSearch() {
+      const input = document.getElementById('searchInput');
+      searchQuery = input.value.trim().toLowerCase();
+      document.getElementById('clearSearchBtn').classList.toggle('hidden', searchQuery === '');
+      renderPrompts();
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      searchQuery = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      renderPrompts();
+    }
+
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      document.getElementById('viewGridBtn').className = mode === 'grid'
+        ? 'p-1.5 rounded text-ink dark:text-paper bg-white dark:bg-ink-3 shadow-sm transition-all text-xs'
+        : 'p-1.5 rounded text-slate-400 dark:text-slate-500 hover:text-ink dark:hover:text-paper transition-all text-xs';
+
+      document.getElementById('viewListBtn').className = mode === 'list'
+        ? 'p-1.5 rounded text-ink dark:text-paper bg-white dark:bg-ink-3 shadow-sm transition-all text-xs'
+        : 'p-1.5 rounded text-slate-400 dark:text-slate-500 hover:text-ink dark:hover:text-paper transition-all text-xs';
+
+      renderPrompts();
+    }
+
+    function renderPrompts() {
+      const container = document.getElementById('cardsContainer');
+
+      // Filter Data
+      const filtered = rawPrompts.filter(item => {
+        const matchType = activeType === 'ALL' || item.type === activeType;
+        const matchCategory = activeCategory === 'ALL' || item.category === activeCategory;
+        const matchSearch = searchQuery === '' ||
+          item.title.toLowerCase().includes(searchQuery) ||
+          item.category.toLowerCase().includes(searchQuery) ||
+          item.type.toLowerCase().includes(searchQuery) ||
+          item.content.toLowerCase().includes(searchQuery);
+
+        return matchType && matchCategory && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        container.className = 'col-span-full py-16 flex flex-col items-center justify-center text-center text-slate-400 space-y-3';
+        container.innerHTML = `
+          <div class="w-12 h-12 rounded-xl border border-line dark:border-line-dark flex items-center justify-center text-slate-400 text-xl">
+            <i class="fa-solid fa-folder-open"></i>
+          </div>
+          <p class="text-sm font-medium">沒有找到符合條件的 Prompt 提示詞</p>
+          <button onclick="clearFilters()" class="text-xs text-brass-600 dark:text-brass-300 hover:underline">清除搜尋條件</button>
+        `;
+        return;
+      }
+
+      if (currentViewMode === 'grid') {
+        container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 transition-all';
+        container.innerHTML = filtered.map(item => createCardHTML(item)).join('');
+      } else {
+        container.className = 'flex flex-col gap-3 transition-all';
+        container.innerHTML = filtered.map(item => createListItemHTML(item)).join('');
+      }
+    }
+
+    function clearFilters() {
+      activeType = 'ALL';
+      activeCategory = 'ALL';
+      clearSearch();
+      renderFilters();
+    }
+
+    function createCardHTML(item) {
+      const stepBadge = item.step ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-brass-50 dark:bg-brass-700/20 text-brass-600 dark:text-brass-300 border border-brass-200 dark:border-brass-600/60">流程 v${item.step}</span>` : '';
+
+      return `
+        <div class="bg-white dark:bg-ink-2 rounded-xl border border-line dark:border-line-dark p-5 shadow-sm hover:shadow-md hover:border-brass-300 dark:hover:border-brass-500/60 transition-all flex flex-col justify-between group">
+          <div>
+            <!-- Top Badges -->
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="px-2.5 py-1 rounded text-[11px] font-semibold eyebrow uppercase text-ink dark:text-paper border border-line dark:border-line-dark">
+                  ${item.type}
+                </span>
+                <span class="px-2.5 py-1 rounded text-[11px] font-medium bg-paper-2 dark:bg-ink-3 text-slate-600 dark:text-slate-300">
+                  ${item.category}
+                </span>
+              </div>
+              ${stepBadge}
+            </div>
+
+            <!-- Card Title -->
+            <h3 class="font-serif text-base font-semibold text-ink dark:text-slate-100 mb-3 group-hover:text-brass-600 dark:group-hover:text-brass-300 transition-colors line-clamp-1">
+              ${escapeHTML(item.title)}
+            </h3>
+
+            <!-- Code/Text Block Preview -->
+            <div onclick="openModal(${item.id})" class="cursor-pointer bg-ink text-slate-300 dark:bg-[#12151c] rounded-lg p-3.5 font-mono text-xs leading-relaxed mb-4 border border-ink-3 relative hover:border-brass-400/60 transition-all">
+              <div class="line-clamp-6 whitespace-pre-wrap">${escapeHTML(item.content)}</div>
+              <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-ink dark:from-[#12151c] to-transparent rounded-b-lg flex items-end justify-center pb-1">
+                <span class="text-[10px] text-slate-400 hover:text-brass-300">點擊擴展展開全部 <i class="fa-solid fa-expand text-[9px]"></i></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div class="flex items-center justify-between pt-2 border-t border-line dark:border-line-dark">
+            <span class="text-[11px] text-slate-400 font-mono">${item.content.length} 字</span>
+            <div class="flex items-center space-x-2">
+              <button onclick="openModal(${item.id})" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-paper-2 dark:hover:bg-ink-3 transition-all">
+                細節
+              </button>
+              <button onclick="copyPromptText('${escapeJsString(item.content)}')" class="px-3.5 py-1.5 rounded-md text-xs font-medium bg-ink hover:bg-brass-600 dark:bg-paper dark:text-ink dark:hover:bg-brass-300 text-paper shadow-sm transition-all flex items-center gap-1.5">
+                <i class="fa-regular fa-copy"></i>
+                <span>複製</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function createListItemHTML(item) {
+      const stepBadge = item.step ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-brass-50 dark:bg-brass-700/20 text-brass-600 dark:text-brass-300 border border-brass-200 dark:border-brass-600/60">v${item.step}</span>` : '';
+
+      return `
+        <div class="bg-white dark:bg-ink-2 rounded-lg border border-line dark:border-line-dark p-4 shadow-sm hover:shadow-md hover:border-brass-300 dark:hover:border-brass-500/60 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold eyebrow uppercase text-ink dark:text-paper border border-line dark:border-line-dark">
+                ${item.type}
+              </span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-paper-2 dark:bg-ink-3 text-slate-600 dark:text-slate-300">
+                ${item.category}
+              </span>
+              ${stepBadge}
+              <h3 class="font-serif text-sm font-semibold text-ink dark:text-slate-100 truncate ml-1">
+                ${escapeHTML(item.title)}
+              </h3>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 font-mono">
+              ${escapeHTML(item.content)}
+            </p>
+          </div>
+
+          <div class="flex items-center space-x-2 shrink-0">
+            <button onclick="openModal(${item.id})" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-paper-2 dark:hover:bg-ink-3 transition-all">
+              檢視
+            </button>
+            <button onclick="copyPromptText('${escapeJsString(item.content)}')" class="px-3 py-1.5 rounded-md text-xs font-medium bg-ink hover:bg-brass-600 dark:bg-paper dark:text-ink dark:hover:bg-brass-300 text-paper shadow-sm transition-all flex items-center gap-1.5">
+              <i class="fa-regular fa-copy"></i>
+              <span>複製 Prompt</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function openModal(id) {
+      const item = rawPrompts.find(p => p.id === id);
+      if (!item) return;
+
+      selectedPromptForModal = item;
+      document.getElementById('modalTitle').textContent = item.title;
+      document.getElementById('modalTextarea').value = item.content;
+      document.getElementById('modalCharCount').textContent = `共 ${item.content.length} 個字元`;
+
+      const stepBadge = item.step ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-brass-50 dark:bg-brass-700/20 text-brass-600 dark:text-brass-300 border border-brass-200 dark:border-brass-600/60">流程 v${item.step}</span>` : '';
+
+      document.getElementById('modalBadges').innerHTML = `
+        <span class="px-2.5 py-1 rounded text-[11px] font-semibold eyebrow uppercase text-ink dark:text-paper border border-line dark:border-line-dark">
+          ${item.type}
+        </span>
+        <span class="px-2.5 py-1 rounded text-[11px] font-medium bg-paper-2 dark:bg-ink-3 text-slate-600 dark:text-slate-300">
+          ${item.category}
+        </span>
+        ${stepBadge}
+      `;
+
+      const modal = document.getElementById('promptModal');
+      const modalCard = document.getElementById('modalCard');
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.add('opacity-100');
+        modalCard.classList.remove('scale-95', 'opacity-0');
+        modalCard.classList.add('scale-100', 'opacity-100');
+      }, 10);
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('promptModal');
+      const modalCard = document.getElementById('modalCard');
+
+      modalCard.classList.remove('scale-100', 'opacity-100');
+      modalCard.classList.add('scale-95', 'opacity-0');
+      modal.classList.remove('opacity-100');
+
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        selectedPromptForModal = null;
+      }, 200);
+    }
+
+    function copyModalPrompt() {
+      if (!selectedPromptForModal) return;
+      const text = document.getElementById('modalTextarea').value;
+      copyPromptText(text);
+    }
+
+    function copyPromptText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('已成功複製 Prompt 到剪貼簿！');
+        }).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showToast('已成功複製 Prompt 到剪貼簿！');
+      } catch (err) {
+        showToast('複製失敗，請手動複製');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      toastMsg.textContent = msg;
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2500);
+    }
+
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+      const isDark = document.documentElement.classList.contains('dark');
+      localStorage.setItem('prompt_theme', isDark ? 'dark' : 'light');
+    }
+
+    function initTheme() {
+      const savedTheme = localStorage.getItem('prompt_theme');
+      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+
+    function escapeHTML(str) {
+      return (str || '').replace(/[&<>'"]/g,
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
+    }
+
+    function escapeJsString(str) {
+      return (str || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r');
+    }
+
+    // Close Modal on backdrop click
+    document.getElementById('promptModal').addEventListener('click', (e) => {
+      if (e.target.id === 'promptModal') closeModal();
+    });
+
+    // Keyboard Shortcuts (Esc to close, Ctrl/Cmd + K to search)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('searchInput').focus();
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      loadSheetData();
+    });
+  </script>
+</body>
+</html>
